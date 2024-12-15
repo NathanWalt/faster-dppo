@@ -90,6 +90,17 @@ class CTDiffusionModel(nn.Module):
 
     # ---------- Sampling ----------#
 
+    def pfode_dxt(self, x, t, cond):
+        noise_prediction = self.network(x, t, cond=cond)
+        sigma_t = self.get_std(t)
+        if self.predict_epsilon:
+            score = - noise_prediction / sigma_t
+        else:
+            score = (x - noise_prediction) / (sigma_t ** 2)
+        beta_t = self.get_beta(t)
+        dxt = -0.5 * beta_t * (x + score)
+        return dxt
+
     @torch.no_grad()
     def forward(self, cond, deterministic=True, n_timesteps=None):
         device = self.device
@@ -105,14 +116,7 @@ class CTDiffusionModel(nn.Module):
         for i, t in enumerate(t_all):
             t = t.view(-1, 1, 1)
             t = t.expand(x.shape[0], 1, 1)
-            noise_prediction = self.network(x, t, cond=cond)
-            sigma_t = self.get_std(t)
-            if self.predict_epsilon:
-                score = - noise_prediction / sigma_t
-            else:
-                score = (x - noise_prediction) / (sigma_t ** 2)
-            beta_t = self.get_beta(t)
-            dxt = -0.5 * beta_t * (x + score)
+            dxt = self.pfode_dxt(x, t, cond)
             x = x - dxt * dt
 
             # clamp action at final step

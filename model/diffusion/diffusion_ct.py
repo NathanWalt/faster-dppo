@@ -3,6 +3,8 @@ import torch
 from torch import nn
 import torch.nn.functional as F
 
+from model.diffusion.diffusion import Sample
+
 log = logging.getLogger(__name__)
 
 
@@ -25,7 +27,7 @@ class CTDiffusionModel(nn.Module):
         beta_min=0.1,
         beta_max=20.0,
         predict_epsilon=True,
-        sampling_steps=50,
+        sampling_steps=100,
         # DDIM sampling
         use_ddim=False,
         ddim_discretize="uniform",
@@ -101,12 +103,14 @@ class CTDiffusionModel(nn.Module):
         t_all = torch.arange(n_timesteps, 0, -1, device=device) / n_timesteps
         dt = 1.0 / n_timesteps
         for i, t in enumerate(t_all):
+            t = t.view(-1, 1, 1)
+            t = t.expand(x.shape[0], 1, 1)
             noise_prediction = self.network(x, t, cond=cond)
             sigma_t = self.get_std(t)
             if self.predict_epsilon:
-                score = noise_prediction / sigma_t
+                score = - noise_prediction / sigma_t
             else:
-                score = (noise_prediction - x) / (sigma_t ** 2)
+                score = (x - noise_prediction) / (sigma_t ** 2)
             beta_t = self.get_beta(t)
             dxt = -0.5 * beta_t * (x + score)
             x = x - dxt * dt
@@ -116,7 +120,7 @@ class CTDiffusionModel(nn.Module):
                 x = torch.clamp(
                     x, -self.final_action_clip_value, self.final_action_clip_value
                 )
-        return x
+        return Sample(x, None)
 
 
     # ---------- Supervised training ----------#
@@ -127,7 +131,7 @@ class CTDiffusionModel(nn.Module):
             (batch_size, 1, 1),
             device=x.device
         )
-        return self.p_losses(x, *args, t)
+        return self.p_losses(x, *args, t=t)
 
     def p_losses(self, x_start, cond: dict, t):
         device = x_start.device

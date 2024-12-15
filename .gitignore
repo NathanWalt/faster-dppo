@@ -11,6 +11,8 @@ out/
 err/
 *.pkl
 *.sh
+bash_scripts/
+d3il/
 
 # ide
 .idea/

@@ -2,6 +2,7 @@ import logging
 import torch
 from torch import nn
 import torch.nn.functional as F
+from model.diffusion.diffusion import Sample
 
 log = logging.getLogger(__name__)
 
@@ -48,9 +49,12 @@ class CTConsistencyModel(nn.Module):
         b = sigma_data * t / torch.sqrt(t * t + sigma_data * sigma_data)
         return a, b
 
-    def forward(self, cond, deterministic=True, t = 1.0, x = None):
+    def forward(self, cond, deterministic=True, t = None, x = None):
         device = self.device
         B = len(cond["state"])
+        
+        if t is None:
+            t = torch.ones((B, 1, 1), device=device)
         
         if x is None:
             x = torch.randn((B, self.horizon_steps, self.action_dim), device=device)
@@ -58,7 +62,7 @@ class CTConsistencyModel(nn.Module):
         a, b = self.get_c(t)
         x = a * x + b * self.network(x, t, cond)
         
-        return x
+        return Sample(x, None)
 
     def loss(self, teacher_model, ema_model, sampling_steps, x, *args):
         return self.consistency_loss(ema_model, teacher_model, sampling_steps, x, *args)

@@ -7,7 +7,7 @@ _target_: agent.eval.eval_diffusion_agent.EvalDiffusionAgent
 
 name: ${env_name}_eval_diffusion_mlp_ta${horizon_steps}_td${denoising_steps}
 logdir: ${oc.env:DPPO_LOG_DIR}/d3il-eval/${name}/${now:%Y-%m-%d}_${now:%H-%M-%S}_${seed}
-base_policy_path:
+base_policy_path: ${oc.env:DPPO_LOG_DIR}/d3il-pretrain/m1/avoid_d56_r12_pre_diffusion_mlp_ta4_td20/2024-07-06_22-50-07/checkpoint/state_10000.pt
 normalization_path: ${oc.env:DPPO_DATA_DIR}/d3il/avoid_m1/normalization.npz
 
 seed: 42

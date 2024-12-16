@@ -67,21 +67,21 @@ class CTConsistencyModel(nn.Module):
     def loss(self, teacher_model, ema_model, sampling_steps, x, *args):
         return self.consistency_loss(ema_model, teacher_model, sampling_steps, x, *args)
     
-    def get_t_i(self, i):
-        return torch.tensor(1.0) / i
+    def get_t_i(self, i, sampling_steps):
+        return i / sampling_steps
     
     def consistency_loss(self, ema_model, teacher_model, sampling_steps, x, cond: dict):
         batch_size = x.shape[0]
         n = torch.randint(1, sampling_steps, (batch_size, 1, 1)).cuda()
         
-        x_tn1 = x + torch.randn_like(x) * torch.sqrt(self.get_t_i(n+1)**2)
-        x_tn_phi = x_tn1 + (self.get_t_i(n) - self.get_t_i(n+1)) * teacher_model.pfode_dxt(x_tn1, torch.tensor(self.get_t_i(n+1)), cond)
+        x_tn1 = x + torch.randn_like(x) * torch.sqrt(self.get_t_i(n+1, sampling_steps)**2)
+        x_tn_phi = x_tn1 + (self.get_t_i(n, sampling_steps) - self.get_t_i(n+1, sampling_steps)) * teacher_model.pfode_dxt(x_tn1, torch.tensor(self.get_t_i(n+1, sampling_steps)), cond)
         
-        a, b = self.get_c(self.get_t_i(n+1))
-        f_theta = a * x + b * self.network(x_tn1, self.get_t_i(n+1), cond=cond)
+        a, b = self.get_c(self.get_t_i(n+1, sampling_steps))
+        f_theta = a * x + b * self.network(x_tn1, self.get_t_i(n+1, sampling_steps), cond=cond)
         
-        a, b = self.get_c(self.get_t_i(n))
-        f_theta_minus = a * x_tn_phi + b * ema_model.network(x_tn_phi, self.get_t_i(n), cond=cond)
+        a, b = self.get_c(self.get_t_i(n, sampling_steps))
+        f_theta_minus = a * x_tn_phi + b * ema_model.network(x_tn_phi, self.get_t_i(n, sampling_steps), cond=cond)
 
         loss = F.mse_loss(f_theta, f_theta_minus, reduction="mean")
         return self.consistency_lambda * loss

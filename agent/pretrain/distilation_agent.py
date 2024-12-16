@@ -14,11 +14,15 @@ class ConsistencyDistillationAgent(PreTrainAgent):
     def __init__(self, cfg):
         super().__init__(cfg)
         self.teacher_model : CTDiffusionModel = hydra.utils.instantiate(cfg.teacher_model)
+        self.update_ema_freq = 1
+        self.epoch_start_ema = 0
 
         loadpath = cfg.teacher_model_network_path
         device = "cuda:0"
         data = torch.load(loadpath, weights_only=True, map_location=device)
         self.teacher_model.load_state_dict(data["model"])
+        self.teacher_model.requires_grad_(False)
+        self.ema_model.requires_grad_(False)
         
         self.learning_rate = cfg.train.learning_rate
         self.d = nn.MSELoss()
@@ -73,7 +77,6 @@ class ConsistencyDistillationAgent(PreTrainAgent):
 
         timer = Timer()
         self.epoch = 1
-        cnt_batch = 0
         for _ in range(self.n_epochs):
             
             # train
@@ -92,9 +95,8 @@ class ConsistencyDistillationAgent(PreTrainAgent):
                 self.optimizer.zero_grad()
 
                 # update ema
-                if cnt_batch % self.update_ema_freq == 0:
-                    self.step_ema()
-                cnt_batch += 1
+                
+                self.step_ema()
             loss_train = np.mean(loss_train_epoch)
 
             # validate

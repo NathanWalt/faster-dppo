@@ -152,7 +152,7 @@ class CTDiffusionModel(nn.Module):
             loss = F.mse_loss(x_recon, x_start, reduction="mean")
         return loss
 
-    def  q_sample(self, x_start, t, noise):
+    def q_sample(self, x_start, t, noise=None):
         if noise is None:
             noise = torch.randn_like(x_start, device=x_start.device)
         return (

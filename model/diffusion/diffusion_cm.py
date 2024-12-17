@@ -71,7 +71,8 @@ class CTConsistencyModel(nn.Module):
     def get_t_i(self, i, sampling_steps):
         return i / sampling_steps
 
-    def consistency_loss(self, ema_model, teacher_model:CTDiffusionModel, sampling_steps, x, cond: dict):
+
+    def consistency_loss(self, ema_model, teacher_model : CTDiffusionModel, sampling_steps, x, cond: dict):
         batch_size = x.shape[0]
         n = torch.randint(1, sampling_steps, (batch_size, 1, 1)).cuda()
 

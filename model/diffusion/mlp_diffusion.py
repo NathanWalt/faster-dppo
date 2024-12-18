@@ -179,6 +179,7 @@ class DiffusionMLP(nn.Module):
         horizon_steps,
         cond_dim,
         time_dim=16,
+        time_scale=1,
         mlp_dims=[256, 256],
         cond_mlp_dims=None,
         activation_type="Mish",
@@ -189,7 +190,7 @@ class DiffusionMLP(nn.Module):
         super().__init__()
         output_dim = action_dim * horizon_steps
         self.time_embedding = nn.Sequential(
-            SinusoidalPosEmb(time_dim),
+            SinusoidalPosEmb(time_dim, scale=time_scale),
             nn.Linear(time_dim, time_dim * 2),
             nn.Mish(),
             nn.Linear(time_dim * 2, time_dim),

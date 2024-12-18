@@ -71,8 +71,8 @@ class CTConsistencyModel(nn.Module):
 
         return Sample(x, None)
 
-    def loss(self, teacher_model, ema_model, sampling_steps, x, *args):
-        return self.consistency_loss(ema_model, teacher_model, sampling_steps, x, *args)
+    def loss(self, teacher_model, ema_model, x, *args):
+        return self.consistency_loss(ema_model, teacher_model, x, *args)
 
     def get_t_i(self, i, sampling_steps):
         return i / sampling_steps

@@ -4,6 +4,7 @@ from torch import nn
 import torch.nn.functional as F
 from model.diffusion.diffusion import Sample
 from model.diffusion.diffusion_ct import CTDiffusionModel
+from util.quantization import quant_model
 
 log = logging.getLogger(__name__)
 
@@ -21,6 +22,7 @@ class CTConsistencyModel(nn.Module):
         sampling_steps = 1000,
         # Consistency parameters
         consistency_lambda=1.0,  # Consistency loss weight
+        quantization = False,
         **kwargs,
     ):
         super().__init__()
@@ -48,6 +50,10 @@ class CTConsistencyModel(nn.Module):
         logging.info(
             f"Number of network parameters: {sum(p.numel() for p in self.parameters())}"
         )
+        
+        if quantization is not None and quantization:
+            self.network = quant_model(self.network)
+            logging.info("Quantize network to w8a8")
 
     def get_c(self,t):
         sigma_data = torch.tensor(0.5)

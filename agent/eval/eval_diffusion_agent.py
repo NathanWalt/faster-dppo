@@ -17,6 +17,8 @@ class EvalDiffusionAgent(EvalAgent):
 
     def __init__(self, cfg):
         super().__init__(cfg)
+        self.update_ema_freq = 1
+        
 
     def run(self):
 

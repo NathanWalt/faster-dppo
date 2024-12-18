@@ -27,11 +27,11 @@ class CTDiffusionModel(nn.Module):
         beta_min=0.1,
         beta_max=20.0,
         predict_epsilon=True,
-        sampling_steps=100,
+        denoising_steps=100,
         # DDIM sampling
         use_ddim=False,
         ddim_discretize="uniform",
-        ddim_steps=None,
+        ddim_steps=100,
         **kwargs,
     ):
         super().__init__()
@@ -39,7 +39,7 @@ class CTDiffusionModel(nn.Module):
         self.horizon_steps = horizon_steps
         self.obs_dim = obs_dim
         self.action_dim = action_dim
-        self.sampling_steps = sampling_steps
+        self.denoising_steps = denoising_steps
         self.beta_min = beta_min
         self.beta_max = beta_max
         self.predict_epsilon = predict_epsilon
@@ -74,6 +74,7 @@ class CTDiffusionModel(nn.Module):
             f"Number of network parameters: {sum(p.numel() for p in self.parameters())}"
         )
 
+    # ---------- DDPM parameters ---------- #
     def get_beta(self, t):
         return self.beta_min + (self.beta_max - self.beta_min) * t
 
@@ -89,14 +90,22 @@ class CTDiffusionModel(nn.Module):
         return torch.sqrt(1 - torch.exp(-self.beta_integral(0, t)))
 
     # ---------- Sampling ----------#
-
-    def pfode_dxt(self, x, t, cond):
+    def score(self, x, t, cond):
         noise_prediction = self.network(x, t, cond=cond)
         sigma_t = self.get_std(t)
+
         if self.predict_epsilon:
             score = - noise_prediction / sigma_t
         else:
             score = (x - noise_prediction) / (sigma_t ** 2)
+        return score
+
+    def score_from_noise(self, noise, t):
+        sigma_t = self.get_std(t)
+        return - noise / sigma_t
+
+    def pfode_dxt(self, x, t, cond):
+        score = self.score(x, t, cond)
         beta_t = self.get_beta(t)
         dxt = -0.5 * beta_t * (x + score)
         return dxt
@@ -107,7 +116,7 @@ class CTDiffusionModel(nn.Module):
         B = len(cond["state"])
 
         if n_timesteps is None:
-            n_timesteps = self.sampling_steps
+            n_timesteps = self.denoising_steps
 
         # a naive implementation euler-solver of PF-ODE
         x = torch.randn((B, self.horizon_steps, self.action_dim), device=device)
@@ -152,7 +161,7 @@ class CTDiffusionModel(nn.Module):
             loss = F.mse_loss(x_recon, x_start, reduction="mean")
         return loss
 
-    def  q_sample(self, x_start, t, noise):
+    def q_sample(self, x_start, t, noise=None):
         if noise is None:
             noise = torch.randn_like(x_start, device=x_start.device)
         return (

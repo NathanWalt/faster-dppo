@@ -7,7 +7,9 @@ _target_: agent.eval.eval_diffusion_agent.EvalDiffusionAgent
 
 name: ${env_name}_eval_diffusion_ct_mlp_ta${horizon_steps}_td${denoising_steps}
 logdir: ${oc.env:DPPO_LOG_DIR}/d3il-eval/${name}/${now:%Y-%m-%d}_${now:%H-%M-%S}_${seed}
-base_policy_path: ${oc.env:DPPO_LOG_DIR}/d3il-pretrain/avoid_m1_pre_diffusion_ct_mlp_ta4_td20/2024-12-15_02-16-50_42/checkpoint/state_5000.pt
+
+# base_policy_path: ${oc.env:DPPO_LOG_DIR}/d3il-pretrain/avoid_m1_pre_diffusion_ct_mlp_ta4_td20/2024-12-17_23-42-36_42/checkpoint/state_15000.pt
+base_policy_path: ${oc.env:DPPO_LOG_DIR}/d3il-finetune/avoiding-m5_m1_ft_diffusion_ct_mlp_ta4_td20_tdf10/2024-12-18_14-34-31_42/checkpoint/state_50.pt
 normalization_path: ${oc.env:DPPO_DATA_DIR}/d3il/avoid_m1/normalization.npz
 
 seed: 42
@@ -15,7 +17,7 @@ device: cuda:0
 env_name: avoiding-m5
 obs_dim: 4
 action_dim: 2
-denoising_steps: 20
+denoising_steps: 100
 cond_steps: 1
 horizon_steps: 4
 act_steps: 4
@@ -55,6 +57,7 @@ model:
   network:
     _target_: model.diffusion.mlp_diffusion.DiffusionMLP
     time_dim: 16
+    time_scale: 1
     mlp_dims: [512, 512, 512]
     activation_type: ReLU
     residual_style: True

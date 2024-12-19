@@ -277,9 +277,7 @@ class CTVPGDiffusion(CTDiffusionModel):
         dt = 1.0 / n_timesteps
         chain = [] if return_chain else None
         if return_chain:
-            if not self.use_ddim and self.ft_denoising_steps == self.denoising_steps:
-                chain.append(x)
-            if self.use_ddim and self.ft_denoising_steps == self.ddim_steps:
+            if self.ft_denoising_steps == n_timesteps:
                 chain.append(x)
 
         for i, t in enumerate(t_all):
@@ -371,7 +369,7 @@ class CTVPGDiffusion(CTDiffusionModel):
                 n_timesteps = self.denoising_steps
 
         # Repeat t for batch dim, keep it 1-dim
-        t_single = 1 - (torch.arange(0, self.ft_denoising_steps, device=self.device) / n_timesteps)
+        t_single = torch.arange(self.ft_denoising_steps, 0, -1, device=self.device) / n_timesteps
             # 4,3,2,1,0,4,3,2,1,0,...,4,3,2,1,0
         t_all = t_single.repeat(chains.shape[0], 1).flatten()
         dt = 1.0 / n_timesteps
@@ -444,7 +442,7 @@ class CTVPGDiffusion(CTDiffusionModel):
             else:
                 n_timesteps = self.denoising_steps
 
-        t_single = 1 - (torch.arange(0, self.ft_denoising_steps, device=self.device) / n_timesteps)
+        t_single = torch.arange(self.ft_denoising_steps, 0, -1, device=self.device) / n_timesteps
         t_all = t_single[denoising_inds]
         dt = 1.0 / n_timesteps
 

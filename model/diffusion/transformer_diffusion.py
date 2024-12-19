@@ -1,161 +1,171 @@
-
+from sympy import Si
+from timm.models.vision_transformer import Attention, Mlp
 import torch
 import torch.nn as nn
 import math
 
-class SinusoidalPosEmb(nn.Module):
-    def __init__(self, dim):
+
+def modulate(x, shift, scale):
+    return x * (1 + scale.unsqueeze(1)) + shift.unsqueeze(1)
+
+
+class TimestepEmbedder(nn.Module):
+    """
+    Embeds scalar timesteps into vector representations.
+    """
+    def __init__(self, hidden_size, frequency_embedding_size=256):
         super().__init__()
-        self.dim = dim
+        self.mlp = nn.Sequential(
+            nn.Linear(frequency_embedding_size, hidden_size, bias=True),
+            nn.SiLU(),
+            nn.Linear(hidden_size, hidden_size, bias=True),
+        )
+        self.frequency_embedding_size = frequency_embedding_size
 
-    def forward(self, x):
-        device = x.device
-        half_dim = self.dim // 2
-        emb = math.log(10000) / (half_dim - 1)
-        emb = torch.exp(torch.arange(half_dim, device=device) * -emb)
-        emb = x[:, None] * emb[None, :]
-        emb = torch.cat((emb.sin(), emb.cos()), dim=-1)
-        return emb
+    @staticmethod
+    def timestep_embedding(t, dim, max_period=10000):
+        """
+        Create sinusoidal timestep embeddings.
+        :param t: a 1-D Tensor of N indices, one per batch element.
+                          These may be fractional.
+        :param dim: the dimension of the output.
+        :param max_period: controls the minimum frequency of the embeddings.
+        :return: an (N, D) Tensor of positional embeddings.
+        """
+        # https://github.com/openai/glide-text2im/blob/main/glide_text2im/nn.py
+        half = dim // 2
+        freqs = torch.exp(
+            -math.log(max_period) * torch.arange(start=0, end=half, dtype=torch.float32) / half
+        ).to(device=t.device)
+        args = t[:, None].float() * freqs[None]
+        embedding = torch.cat([torch.cos(args), torch.sin(args)], dim=-1)
+        if dim % 2:
+            embedding = torch.cat([embedding, torch.zeros_like(embedding[:, :1])], dim=-1)
+        return embedding
 
-class TransformerBlock(nn.Module):
-    def __init__(
-        self, 
-        input_dim, 
-        num_heads=8, 
-        dropout=0.2,  # 增加 dropout 
-        activation_type="ReLU",
-        use_layernorm=True
-    ):
+    def forward(self, t):
+        t_freq = self.timestep_embedding(t, self.frequency_embedding_size)
+        t_emb = self.mlp(t_freq)
+        return t_emb
+    
+
+class DiTBlock(nn.Module):
+    """
+    A DiT block with adaptive layer norm zero (adaLN-Zero) conditioning.
+    """
+    def __init__(self, hidden_size, num_heads, mlp_ratio=4.0, **block_kwargs):
         super().__init__()
-        
-        
-        activation_dict = {
-            "Mish": nn.Mish(),
-            "ReLU": nn.ReLU(),
-            "GELU": nn.GELU(),
-            "LeakyReLU": nn.LeakyReLU()
-        }
-        activation = activation_dict.get(activation_type, nn.ReLU())
-        
-        # Layer normalization
-        self.norm1 = nn.LayerNorm(input_dim) if use_layernorm else nn.Identity()
-        self.norm2 = nn.LayerNorm(input_dim) if use_layernorm else nn.Identity()
-        
-        # Multi-head attention with more robust configuration
-        self.multihead_attn = nn.MultiheadAttention(
-            embed_dim=input_dim, 
-            num_heads=num_heads, 
-            dropout=dropout, 
-            batch_first=True,
-            kdim=input_dim,
-            vdim=input_dim
+        self.norm1 = nn.LayerNorm(hidden_size, elementwise_affine=False, eps=1e-6)
+        self.attn = Attention(hidden_size, num_heads=num_heads, qkv_bias=True, **block_kwargs)
+        self.norm2 = nn.LayerNorm(hidden_size, elementwise_affine=False, eps=1e-6)
+        mlp_hidden_dim = int(hidden_size * mlp_ratio)
+        approx_gelu = lambda: nn.GELU(approximate="tanh")
+        self.mlp = Mlp(in_features=hidden_size, hidden_features=mlp_hidden_dim, act_layer=approx_gelu, drop=0)
+        self.adaLN_modulation = nn.Sequential(
+            nn.SiLU(),
+            nn.Linear(hidden_size, 6 * hidden_size, bias=True)
         )
-        
-        self.ffn = nn.Sequential(
-            nn.Linear(input_dim, input_dim * 4),
-            activation,
-            nn.Dropout(dropout),
-            nn.Linear(input_dim * 4, input_dim),
-            nn.Dropout(dropout)  
-        )
-        
-        self.dropout = nn.Dropout(dropout)
 
-    def forward(self, x):
-        
-        residual = x
-        x = self.norm1(x)
-        
-        # 多头注意力
-        attn_output, _ = self.multihead_attn(x, x, x)
-        x = residual + self.dropout(attn_output)
-        x = self.norm1(x)
-        # Feed-forward
-        residual = x
-        x = self.norm2(x)
-        ffn_output = self.ffn(x)
-        x = residual + self.dropout(ffn_output)
-        x = self.norm2(x)
+    def forward(self, x, c):
+        shift_msa, scale_msa, gate_msa, shift_mlp, scale_mlp, gate_mlp = self.adaLN_modulation(c).chunk(6, dim=1)
+        x = x + gate_msa.unsqueeze(1) * self.attn(modulate(self.norm1(x), shift_msa, scale_msa))
+        x = x + gate_mlp.unsqueeze(1) * self.mlp(modulate(self.norm2(x), shift_mlp, scale_mlp))
         return x
+
+
+class FinalLayer(nn.Module):
+    """
+    The final layer of DiT.
+    """
+    def __init__(self, hidden_size, output_size):
+        super().__init__()
+        self.norm_final = nn.LayerNorm(hidden_size, elementwise_affine=False, eps=1e-6)
+        self.linear = nn.Linear(hidden_size, output_size, bias=True)
+        self.adaLN_modulation = nn.Sequential(
+            nn.SiLU(),
+            nn.Linear(hidden_size, 2 * hidden_size, bias=True)
+        )
+
+    def forward(self, x, c):
+        shift, scale = self.adaLN_modulation(c).chunk(2, dim=1)
+        x = modulate(self.norm_final(x), shift, scale)
+        x = self.linear(x)
+        return x
+
 
 class DiffusionTransformer(nn.Module):
     def __init__(
         self,
         action_dim,
-        horizon_steps,
         cond_dim,
-        time_dim=16,
-        transformer_dims=[256, 256],
-        num_transformer_layers=3,  
+        hidden_size=256,
+        num_transformer_layers=3,
         num_heads=8,
-        cond_mlp_dims=None,
-        activation_type="ReLU",  
-        dropout=0.2,  
-        use_layernorm=True,
-        use_residual_connection= False
     ):
         super().__init__()
-        output_dim = action_dim * horizon_steps
         
-        # Time embedding
-        self.time_embedding = nn.Sequential(
-            SinusoidalPosEmb(time_dim),
-            nn.Linear(time_dim, time_dim * 2),
-            nn.ReLU(),  # 改为 ReLU
-            nn.Linear(time_dim * 2, time_dim),
+        self.t_embedder = TimestepEmbedder(hidden_size)
+        self.c_embedder = nn.Sequential(
+            nn.Linear(cond_dim, hidden_size, bias=True),
+            nn.SiLU(),
+            nn.Linear(hidden_size, hidden_size, bias=True),
+        )
+        self.x_embedder = nn.Sequential(
+            nn.Linear(action_dim, hidden_size, bias=True),
+            nn.SiLU(),
+            nn.Linear(hidden_size, hidden_size, bias=True),
         )
         
-        # Conditional MLP (optional)
-        if cond_mlp_dims is not None:
-            self.cond_mlp = nn.Sequential(
-                nn.Linear(cond_dim, cond_mlp_dims[0]),
-                nn.ReLU(),  
-                *[
-                    nn.Sequential(
-                        nn.Linear(cond_mlp_dims[i], cond_mlp_dims[i+1]),
-                        nn.ReLU()  
-                    ) for i in range(len(cond_mlp_dims)-1)
-                ]
-            )
-            input_dim = time_dim + action_dim * horizon_steps + cond_mlp_dims[-1]
-        else:
-            input_dim = time_dim + action_dim * horizon_steps + cond_dim
-        
         # Transformer layers
-        self.transformer_layers = nn.ModuleList([
-            TransformerBlock(
-                input_dim, 
-                num_heads=num_heads, 
-                dropout=dropout, 
-                activation_type=activation_type,
-                use_layernorm=use_layernorm
+        self.blocks = nn.ModuleList([
+            DiTBlock(
+                hidden_size=hidden_size,
+                num_heads=num_heads,
+                mlp_ratio=4.0
             ) for _ in range(num_transformer_layers)
         ])
         
         # Output projection with more regularization
-        output_layers = []
-        prev_dim = input_dim
-        for dim in transformer_dims:
-            output_layers.extend([
-                nn.Linear(prev_dim, dim),
-                nn.ReLU(),
-                nn.Dropout(dropout)
-            ])
-            prev_dim = dim
-        
-        output_layers.append(nn.Linear(prev_dim, output_dim))
-        
-        self.output_projection = nn.Sequential(*output_layers)
-        
-        self.time_dim = time_dim
-        self.use_residual_connection = use_residual_connection
+        self.final_layer = FinalLayer(hidden_size=hidden_size, output_size=action_dim)
+        self.initialize_weights()
+
+    def initialize_weights(self):
+        # Initialize transformer layers:
+        def _basic_init(module):
+            if isinstance(module, nn.Linear):
+                torch.nn.init.xavier_uniform_(module.weight)
+                if module.bias is not None:
+                    nn.init.constant_(module.bias, 0)
+        self.apply(_basic_init)
+
+        # Initialize timestep embedding MLP:
+        nn.init.normal_(self.t_embedder.mlp[0].weight, std=0.02)
+        nn.init.normal_(self.t_embedder.mlp[2].weight, std=0.02)
+
+        # Initialize conditional embedding MLP:
+        nn.init.normal_(self.c_embedder[0].weight, std=0.02)
+        nn.init.normal_(self.c_embedder[2].weight, std=0.02)
+
+        # Initialize input embedding MLP:
+        nn.init.normal_(self.x_embedder[0].weight, std=0.02)
+        nn.init.normal_(self.x_embedder[2].weight, std=0.02)
+
+        # Zero-out adaLN modulation layers in DiT blocks:
+        for block in self.blocks:
+            nn.init.constant_(block.adaLN_modulation[-1].weight, 0)
+            nn.init.constant_(block.adaLN_modulation[-1].bias, 0)
+
+        # Zero-out output layers:
+        nn.init.constant_(self.final_layer.adaLN_modulation[-1].weight, 0)
+        nn.init.constant_(self.final_layer.adaLN_modulation[-1].bias, 0)
+        nn.init.constant_(self.final_layer.linear.weight, 0)
+        nn.init.constant_(self.final_layer.linear.bias, 0)
 
     def forward(
         self,
         x,
         time,
         cond,
-        **kwargs,
     ):
         """
         x: (B, Ta, Da)
@@ -166,36 +176,23 @@ class DiffusionTransformer(nn.Module):
         B, Ta, Da = x.shape
 
         # flatten chunk
-        x = x.view(B, -1)
+        x = self.x_embedder(x)
 
         # flatten history
         state = cond["state"].view(B, -1)
-
         # obs encoder
-        if hasattr(self, "cond_mlp"):
-            state = self.cond_mlp(state)
+        state = self.c_embedder(state)
 
         # append time and cond
-        time = time.view(B, 1)
-        time_emb = self.time_embedding(time).view(B, self.time_dim)
-        x = torch.cat([x, time_emb, state], dim=-1)
+        time = time.view(B)
+        time_emb = self.t_embedder(time)
         
-        # Add sequence dimension for transformer
-        x_orig = x
-        x = x.unsqueeze(1)
-        
-        # Transformer layers with optional residual connection
-        for transformer_layer in self.transformer_layers:
-            x = transformer_layer(x)
-        
-        # Output projection
-        x = x.squeeze(1)
-        
-       # Optional global residual connection
-        if self.use_residual_connection:
-            x = x + x_orig 
-        
-        out = self.output_projection(x)
-        
-        return out.view(B, Ta, Da)
+        y = state + time_emb
 
+        # transformer layers
+        for block in self.blocks:
+            x = block(x, y)
+        # output projection
+        x = self.final_layer(x, y)
+
+        return x.view(B, Ta, Da)

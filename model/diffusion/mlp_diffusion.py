@@ -8,7 +8,7 @@ import torch.nn as nn
 import logging
 import einops
 from copy import deepcopy
-
+import math
 from model.common.mlp import MLP, ResidualMLP
 from model.diffusion.modules import SinusoidalPosEmb
 from model.common.modules import SpatialEmb, RandomShiftsAug
@@ -179,7 +179,6 @@ class DiffusionMLP(nn.Module):
         horizon_steps,
         cond_dim,
         time_dim=16,
-        time_scale=1,
         mlp_dims=[256, 256],
         cond_mlp_dims=None,
         activation_type="Mish",
@@ -190,7 +189,7 @@ class DiffusionMLP(nn.Module):
         super().__init__()
         output_dim = action_dim * horizon_steps
         self.time_embedding = nn.Sequential(
-            SinusoidalPosEmb(time_dim, scale=time_scale),
+            SinusoidalPosEmb(time_dim),
             nn.Linear(time_dim, time_dim * 2),
             nn.Mish(),
             nn.Linear(time_dim * 2, time_dim),
@@ -249,3 +248,4 @@ class DiffusionMLP(nn.Module):
         # mlp head
         out = self.mlp_mean(x)
         return out.view(B, Ta, Da)
+

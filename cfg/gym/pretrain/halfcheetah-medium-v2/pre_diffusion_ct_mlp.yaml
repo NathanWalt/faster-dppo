@@ -5,35 +5,34 @@ hydra:
     dir: ${logdir}
 _target_: agent.pretrain.train_diffusion_agent.TrainDiffusionAgent
 
-name: avoid_m1_pre_diffusion_ct_mlp_ta${horizon_steps}_td${denoising_steps}
-logdir: ${oc.env:DPPO_LOG_DIR}/d3il-pretrain/${name}/${now:%Y-%m-%d}_${now:%H-%M-%S}_${seed}
-train_dataset_path: ${oc.env:DPPO_DATA_DIR}/d3il/avoid_m1/train.npz
+name: ${env}_pre_diffusion_ct_mlp_ta${horizon_steps}_td${denoising_steps}
+logdir: ${oc.env:DPPO_LOG_DIR}/gym-pretrain/${name}/${now:%Y-%m-%d}_${now:%H-%M-%S}_${seed}
+train_dataset_path: ${oc.env:DPPO_DATA_DIR}/gym/${env}/train.npz
 
 seed: 42
 device: cuda:0
-env: avoid
-mode: d56_r12 # M1, desired modes 5 and 6, required modes 1 and 2
-obs_dim: 4
-action_dim: 2
+env: halfcheetah-medium-v2
+obs_dim: 17
+action_dim: 6
 denoising_steps: 20
 horizon_steps: 4
 cond_steps: 1
 
 wandb:
   entity: ${oc.env:DPPO_WANDB_ENTITY}
-  project: d3il-${env}-pretrain
+  project: gym-${env}-pretrain
   run: ${now:%H-%M-%S}_${name}
 
 train:
-  n_epochs: 5000
-  batch_size: 16
-  learning_rate: 1e-4
+  n_epochs: 3000
+  batch_size: 128
+  learning_rate: 1e-3
   weight_decay: 1e-6
   lr_scheduler:
-    first_cycle_steps: 5000
-    warmup_steps: 100
-    min_lr: 1e-5
-  save_model_freq: 500
+    first_cycle_steps: 200
+    warmup_steps: 1
+    min_lr: 1e-4
+  save_model_freq: 100
 
 model:
   _target_: model.diffusion.diffusion_ct.CTDiffusionModel
@@ -42,6 +41,7 @@ model:
   network:
     _target_: model.diffusion.mlp_diffusion.DiffusionMLP
     time_dim: 16
+    time_scale: 1
     mlp_dims: [512, 512, 512]
     activation_type: ReLU
     residual_style: True

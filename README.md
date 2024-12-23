@@ -1,12 +1,8 @@
-# Diffusion Policy Policy Optimization (DPPO)
+# Faster DPPO
+We build upon the [DPPO]((https://diffusion-ppo.github.io/)) framework to empower DPPO with a continuous-time formulation, a DiT-like architecture,
+and consistency distillation.
 
-[[Paper](https://arxiv.org/abs/2409.00588)]&nbsp;&nbsp;[[Website](https://diffusion-ppo.github.io/)]
-
-[Allen Z. Ren](https://allenzren.github.io/)<sup>1</sup>, [Justin Lidard](https://jlidard.github.io/)<sup>1</sup>, [Lars L. Ankile](https://ankile.com/)<sup>2,3</sup>, [Anthony Simeonov](https://anthonysimeonov.github.io/)<sup>3</sup><br>
-[Pulkit Agrawal](https://people.csail.mit.edu/pulkitag/)<sup>3</sup>, [Anirudha Majumdar](https://mae.princeton.edu/people/faculty/majumdar)<sup>1</sup>, [Benjamin Burchfiel](http://www.benburchfiel.com/)<sup>4</sup>, [Hongkai Dai](https://hongkai-dai.github.io/)<sup>4</sup>, [Max Simchowitz](https://msimchowitz.github.io/)<sup>3,5</sup>
-
-<sup>1</sup>Princeton University, <sup>2</sup>Harvard University, <sup>3</sup>Masschusetts Institute of Technology<br>
-<sup>4</sup>Toyota Research Institute, <sup>5</sup>Carnegie Mellon University
+The readme is adapted from the original DPPO readme.
 
 <img src="https://github.com/diffusion-ppo/diffusion-ppo.github.io/blob/main/img/overview-full.png" alt="drawing" width="100%"/>
 

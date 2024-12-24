@@ -1,4 +1,3 @@
-from sympy import Si
 from timm.models.vision_transformer import Attention, Mlp
 import torch
 import torch.nn as nn

@@ -10,6 +10,14 @@ import wandb
 import hydra
 
 import numpy as np
+
+def extract_teacher_model(state_dict, target_key):
+    new_state_dict = {}
+    for k, v in state_dict.items():
+        if target_key in k:
+            new_state_dict[k.split(target_key + ".")[1]] = v
+    return new_state_dict
+
 class ConsistencyDistillationAgent(PreTrainAgent):
     def __init__(self, cfg):
         super().__init__(cfg)
@@ -20,7 +28,7 @@ class ConsistencyDistillationAgent(PreTrainAgent):
         loadpath = cfg.teacher_model_network_path
         device = "cuda:0"
         data = torch.load(loadpath, weights_only=True, map_location=device)
-        self.teacher_model.load_state_dict(data["model"])
+        self.teacher_model.network.load_state_dict(extract_teacher_model(data["model"], "actor_ft"))
         self.teacher_model.requires_grad_(False)
         self.ema_model.requires_grad_(False)
 
@@ -88,6 +96,7 @@ class ConsistencyDistillationAgent(PreTrainAgent):
                     wandb.log(
                         {
                             "loss - train": loss_train,
+                            "learning_rate": self.optimizer.param_groups[0]["lr"],
                         },
                         step=self.epoch,
                         commit=True,

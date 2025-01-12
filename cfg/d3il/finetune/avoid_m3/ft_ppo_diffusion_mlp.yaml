@@ -7,7 +7,7 @@ _target_: agent.finetune.train_ppo_diffusion_agent.TrainPPODiffusionAgent
 
 name: ${env_name}_m3_ft_diffusion_mlp_ta${horizon_steps}_td${denoising_steps}_tdf${ft_denoising_steps}
 logdir: ${oc.env:DPPO_LOG_DIR}/d3il-finetune/${name}/${now:%Y-%m-%d}_${now:%H-%M-%S}_${seed}
-base_policy_path: ${oc.env:DPPO_LOG_DIR}/d3il-pretrain/m3/avoid_d58_r12_pre_diffusion_mlp_ta4_td20/2024-07-07_13-54-54/checkpoint/state_15000.pt
+base_policy_path: ${oc.env:DPPO_LOG_DIR}/d3il-pretrain/avoid_m3_pre_diffusion_mlp_ta4_td20/2024-12-19_10-32-51_42/checkpoint/state_5000.pt
 normalization_path: ${oc.env:DPPO_DATA_DIR}/d3il/avoid_m3/normalization.npz
 
 seed: 42
@@ -94,13 +94,9 @@ model:
   #
   network_path: ${base_policy_path}
   actor:
-    _target_: model.diffusion.mlp_diffusion.DiffusionMLP
-    time_dim: 16
-    mlp_dims: [512, 512, 512]
-    activation_type: ReLU
-    residual_style: True
+    _target_: model.diffusion.transformer_diffusion.DiffusionTransformer
+    hidden_size: 512
     cond_dim: ${eval:'${obs_dim} * ${cond_steps}'}
-    horizon_steps: ${horizon_steps}
     action_dim: ${action_dim}
   critic:
     _target_: model.common.critic.CriticObs

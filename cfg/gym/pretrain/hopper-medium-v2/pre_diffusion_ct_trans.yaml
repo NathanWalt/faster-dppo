@@ -5,7 +5,7 @@ hydra:
     dir: ${logdir}
 _target_: agent.pretrain.train_diffusion_agent.TrainDiffusionAgent
 
-name: ${env}_pre_diffusion_mlp_ta${horizon_steps}_td${denoising_steps}
+name: ${env}_pre_diffusion_ct_trans_ta${horizon_steps}_td${denoising_steps}
 logdir: ${oc.env:DPPO_LOG_DIR}/gym-pretrain/${name}/${now:%Y-%m-%d}_${now:%H-%M-%S}_${seed}
 train_dataset_path: ${oc.env:DPPO_DATA_DIR}/gym/${env}/train.npz
 
@@ -35,20 +35,14 @@ train:
   save_model_freq: 50
 
 model:
-  _target_: model.diffusion.diffusion.DiffusionModel
+  _target_: model.diffusion.diffusion_ct.CTDiffusionModel
   predict_epsilon: True
   denoised_clip_value: 1.0
   network:
-    _target_: model.diffusion.mlp_diffusion.DiffusionMLP
-    horizon_steps: ${horizon_steps}
-    action_dim: ${action_dim}
+    _target_: model.diffusion.transformer_diffusion.DiffusionTransformer
+    hidden_size: 512
     cond_dim: ${eval:'${obs_dim} * ${cond_steps}'}
-    time_dim: 16
-    mlp_dims: [512, 512, 512]
-    activation_type: ReLU
-    out_activation_type: Identity
-    use_layernorm: False
-    residual_style: True
+    action_dim: ${action_dim}
   horizon_steps: ${horizon_steps}
   obs_dim: ${obs_dim}
   action_dim: ${action_dim}

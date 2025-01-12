@@ -7,7 +7,7 @@ _target_: agent.finetune.train_ppo_diffusion_agent.TrainPPODiffusionAgent
 
 name: ${env_name}_m2_ft_diffusion_mlp_ta${horizon_steps}_td${denoising_steps}_tdf${ft_denoising_steps}
 logdir: ${oc.env:DPPO_LOG_DIR}/d3il-finetune/${name}/${now:%Y-%m-%d}_${now:%H-%M-%S}_${seed}
-base_policy_path: ${oc.env:DPPO_LOG_DIR}/d3il-pretrain/m2/avoid_d57_r12_pre_diffusion_mlp_ta4_td20/2024-07-07_13-12-09/checkpoint/state_15000.pt
+base_policy_path: ${oc.env:DPPO_LOG_DIR}/d3il-pretrain/avoid_m2_pre_diffusion_mlp_ta4_td20/2024-12-19_10-28-03_42/checkpoint/state_5000.pt
 normalization_path: ${oc.env:DPPO_DATA_DIR}/d3il/avoid_m2/normalization.npz
 
 seed: 42
@@ -17,7 +17,7 @@ mode: d57_r12 # M2, desired modes 5 and 7, required modes 1 and 2
 obs_dim: 4
 action_dim: 2
 denoising_steps: 20
-ft_denoising_steps: 10
+ft_denoising_steps: 20
 cond_steps: 1
 horizon_steps: 4
 act_steps: 4

@@ -24,15 +24,15 @@ wandb:
   run: ${now:%H-%M-%S}_${name}
 
 train:
-  n_epochs: 200
+  n_epochs: 50
   batch_size: 128
-  learning_rate: 1e-3
+  learning_rate: 1e-4
   weight_decay: 1e-6
   lr_scheduler:
-    first_cycle_steps: 200
+    first_cycle_steps: 50
     warmup_steps: 1
-    min_lr: 1e-4
-  save_model_freq: 100
+    min_lr: 1e-5
+  save_model_freq: 50
 
 model:
   _target_: model.diffusion.diffusion.DiffusionModel
